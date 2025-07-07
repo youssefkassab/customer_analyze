@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Customer Analyze</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Customer Analyze</h1>
+    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" />
+    <div id="tableContainer"></div>
+    <button id="submitBtn" style="display:none;">Submit to Backend</button>
+  </div>
+
+  <script>
+    const TARGET_COLUMNS = ["CustomerID", "Country", "InvoiceDate","StockCode","Description","CustomerID","Quantity","UnitPrice"];
+    let filteredHeaders = [];
+    let filteredRows = [];
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return alert("Please select a file.");
+
+      const reader = new FileReader();
+
+      reader.onload = function(event) {
+        try {
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          const allHeaders = jsonData[0];
+
+          const columnIndexes = TARGET_COLUMNS.map(col => allHeaders.indexOf(col)).filter(i => i !== -1);
+
+          if (columnIndexes.length === 0) {
+            alert("Target columns not found in the file.");
+            return;
+          }
+
+          filteredHeaders = columnIndexes.map(i => allHeaders[i]);
+          filteredRows = jsonData.slice(1,10001).map(row => columnIndexes.map(i => row[i]));
+
+          renderTable(filteredHeaders, filteredRows);
+          document.getElementById('submitBtn').style.display = 'block';
+        } catch (error) {
+          console.error("Error reading file:", error);
+          alert("Failed to read the file. Please upload a valid Excel/CSV file.");
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+
+    function renderTable(headers, rows) {
+      const container = document.getElementById('tableContainer');
+      let html = '<table><thead><tr>';
+
+      headers.forEach(header => {
+        html += `<th>${header}</th>`;
+      });
+
+      html += '</tr></thead><tbody>';
+
+      rows.forEach(row => {
+        html += '<tr>';
+        row.forEach(cell => {
+          html += `<td>${cell !== undefined ? cell : ''}</td>`;
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    document.getElementById('submitBtn').addEventListener('click', () => {
+      fetch('/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ headers: filteredHeaders, rows: filteredRows })
+      })
+      .then(res => res.text())
+      .then(msg => alert(msg));
+    });
+  </script>
+</body>
+</html>

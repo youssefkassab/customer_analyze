@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Results - Customer Analyze</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>📑 Excel File Columns</h1>
+    <table>
+      <thead>
+        <tr>
+          <% headers.forEach(header => { %>
+            <th><%= header %></th>
+          <% }) %>
+        </tr>
+      </thead>
+      <tbody>
+        <% rows.forEach(row => { %>
+          <tr>
+            <% row.forEach(cell => { %>
+              <td><%= cell %></td>
+            <% }) %>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <a href="/">⬅ Back</a>
+  </div>
+</body>
+</html>
