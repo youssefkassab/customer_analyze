@@ -2,10 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Customer Analysis</title>
+  <title>Customer Clustering</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    h2 { color: #333; }
+    #result { margin-top: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
 </head>
 <body>
-  <h2>Upload Excel File</h2>
+  <h2>Upload Excel or CSV for Clustering</h2>
   <input type="file" id="excelFile" />
   <button onclick="uploadFile()">Upload</button>
   <p id="message"></p>
@@ -17,28 +27,54 @@
       const formData = new FormData();
       formData.append("file", fileInput.files[0]);
 
-      document.getElementById("message").innerText = "Uploading...";
+      const message = document.getElementById("message");
+      const resultDiv = document.getElementById("result");
+      message.className = "";
+      message.innerText = "Uploading...";
 
-      fetch("http://localhost:3000/upload", {
+      fetch("http://localhost:3000/cluster", {
         method: "POST",
         body: formData,
       })
         .then((res) => res.json())
         .then((data) => {
-          document.getElementById("message").innerText = data.message;
-          const table = `<table border="1">
-              <tr><th>ID</th><th>Age</th><th>Purchase</th><th>Prediction</th></tr>
-              ${data.predictions
-                .map(
-                  (p) =>
-                    `<tr><td>${p.customer_id}</td><td>${p.age}</td><td>${p.purchase_history}</td><td>${p.prediction.toFixed(2)}</td></tr>`
-                )
-                .join("")}
-            </table>`;
-          document.getElementById("result").innerHTML = table;
+          if (data.error) {
+            message.className = "error";
+            message.innerText = "❌ " + data.error;
+            resultDiv.innerHTML = "";
+            return;
+          }
+
+          message.className = "success";
+          message.innerText = `✅ Clustering complete! Best k = ${data.best_k}`;
+
+          const rows = data.clusters.map(c => `
+            <tr>
+              <td>${c.Cluster}</td>
+              <td>${c.Num_Elements}</td>
+              <td>${c.Description}</td>
+              <td>${Object.entries(c.Statistics).map(([k,v]) => `${k}: ${v}`).join("<br>")}</td>
+            </tr>
+          `).join("");
+
+          resultDiv.innerHTML = `
+            <table>
+              <thead>
+                <tr>
+                  <th>Cluster</th>
+                  <th>Count</th>
+                  <th>Description</th>
+                  <th>Statistics</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
         })
         .catch(() => {
-          document.getElementById("message").innerText = "Upload failed.";
+          message.className = "error";
+          message.innerText = "❌ Upload failed.";
+          resultDiv.innerHTML = "";
         });
     }
   </script>
