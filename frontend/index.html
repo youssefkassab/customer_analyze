@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Customer Analysis</title>
+</head>
+<body>
+  <h2>Upload Excel File</h2>
+  <input type="file" id="excelFile" />
+  <button onclick="uploadFile()">Upload</button>
+  <p id="message"></p>
+  <div id="result"></div>
+
+  <script>
+    function uploadFile() {
+      const fileInput = document.getElementById("excelFile");
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      document.getElementById("message").innerText = "Uploading...";
+
+      fetch("http://localhost:3000/upload", {
+        method: "POST",
+        body: formData,
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          document.getElementById("message").innerText = data.message;
+          const table = `<table border="1">
+              <tr><th>ID</th><th>Age</th><th>Purchase</th><th>Prediction</th></tr>
+              ${data.predictions
+                .map(
+                  (p) =>
+                    `<tr><td>${p.customer_id}</td><td>${p.age}</td><td>${p.purchase_history}</td><td>${p.prediction.toFixed(2)}</td></tr>`
+                )
+                .join("")}
+            </table>`;
+          document.getElementById("result").innerHTML = table;
+        })
+        .catch(() => {
+          document.getElementById("message").innerText = "Upload failed.";
+        });
+    }
+  </script>
+</body>
+</html>
