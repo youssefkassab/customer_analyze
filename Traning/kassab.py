@@ -26,3 +26,9 @@ customer_df['avg_order_value'] = customer_df['total_spend'] / customer_df['purch
 print(df.head())       # first 5 rows
 print(df.info())       # types, nulls
 print(df.describe())   # statistical summary
+# preprocessor = ColumnTransformer(
+#     transformers=[
+#         ('assignment_tfidf', TfidfVectorizer(ngram_range=(1,2),min_df=3,max_df=0.85,max_features=8000), 'assignment'),
+#         ('full_text_tfidf', TfidfVectorizer(ngram_range=(1,2),min_df=3,max_df=0.85,max_features=8000), 'full_text')
+#     ]
+# )
