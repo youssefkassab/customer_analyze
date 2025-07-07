@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-df = pd.read_excel("D:\youssef kassab\Downloads\Ai\P2\customer_analyze\Traning\Online Retail.xlsx")
+df = pd.read_excel("./Traning/Online Retail.xlsx")
 df['InvoiceNo'] = pd.to_numeric(df['InvoiceNo'], errors='coerce')
 df = df.dropna()
 df = df[df['InvoiceNo'] >= 0]  
