@@ -1,54 +1,120 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>Customer Analyze</title>
+  <link rel="stylesheet" href="/style/style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.3/build/global/luxon.min.js"></script>
 </head>
+
 <body>
   <div class="container">
-    <h1>📊 Customer Analyze</h1>
+    <h1>📊 <span style="color:#3498db;">Customer</span> Analyze</h1>
+
     <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" />
+
+    <div id="loadingSpinner" style="display:none; text-align:center; margin-top:20px;">
+      <div class="loader"></div>
+      <p>Loading data...</p>
+    </div>
+
+
     <div id="tableContainer"></div>
+
     <button id="submitBtn" style="display:none;">Submit to Backend</button>
   </div>
 
   <script>
-    const TARGET_COLUMNS = ["CustomerID", "Country", "InvoiceDate","StockCode","Description","CustomerID","Quantity","UnitPrice"];
-    let filteredHeaders = [];
-    let filteredRows = [];
+    const DateTime = luxon.DateTime;
+    let processedCustomers = [];
 
-    document.getElementById('fileInput').addEventListener('change', function(e) {
+    document.getElementById('fileInput').addEventListener('change', function (e) {
       const file = e.target.files[0];
       if (!file) return alert("Please select a file.");
 
       const reader = new FileReader();
+      document.getElementById("loadingSpinner").style.display = "block";
 
-      reader.onload = function(event) {
+      reader.onload = function (event) {
         try {
           const data = new Uint8Array(event.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
           const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          console.log("First row:", jsonData[0]);
 
-          const allHeaders = jsonData[0];
+          let cleaned = jsonData.filter(row =>
+            row['CustomerID'] &&
+            row['InvoiceNo'] &&
+            row['Quantity'] >= 0 &&
+            row['UnitPrice'] &&
+            row['InvoiceDate']
+          ).map(row => {
+            const invoiceDate = DateTime.fromISO(new Date(row['InvoiceDate']).toISOString());
 
-          const columnIndexes = TARGET_COLUMNS.map(col => allHeaders.indexOf(col)).filter(i => i !== -1);
+            return {
+              CustomerID: String(row['CustomerID']),
+              InvoiceNo: parseInt(row['InvoiceNo']),
+              Quantity: row['Quantity'],
+              UnitPrice: row['UnitPrice'],
+              InvoiceDate: invoiceDate.toISO(),
+              day: invoiceDate.toFormat('cccc'),
+              month: invoiceDate.month,
+              year: invoiceDate.year,
+              time_24h: invoiceDate.toFormat('HH:mm'),
+              line_total: row['Quantity'] * row['UnitPrice']
+            };
+          });
 
-          if (columnIndexes.length === 0) {
-            alert("Target columns not found in the file.");
-            return;
+          // ✅ Keep only last 1000 entries
+          cleaned = cleaned.slice(-1000);
+          console.log("Cleaned rows used:", cleaned.length);
+
+          // Aggregation
+          const customerMap = {};
+          for (const row of cleaned) {
+            if (!customerMap[row.CustomerID]) {
+              customerMap[row.CustomerID] = {
+                total_spend: 0,
+                invoices: new Set(),
+                months: new Set(),
+                days: new Set(),
+                years: new Set(),
+                total_line_total: 0,
+              };
+            }
+            customerMap[row.CustomerID].total_spend += row.line_total;
+            customerMap[row.CustomerID].invoices.add(row.InvoiceNo);
+            customerMap[row.CustomerID].months.add(row.month);
+            customerMap[row.CustomerID].days.add(row.day);
+            customerMap[row.CustomerID].years.add(row.year);
+            customerMap[row.CustomerID].total_line_total += row.line_total;
           }
 
-          filteredHeaders = columnIndexes.map(i => allHeaders[i]);
-          filteredRows = jsonData.slice(1,10001).map(row => columnIndexes.map(i => row[i]));
+          processedCustomers = cleaned.map(row => ({
+            CustomerID: row.CustomerID,
+            InvoiceNo: row.InvoiceNo,
+            Quantity: row.Quantity,
+            UnitPrice: row.UnitPrice,
+            line_total: row.line_total.toFixed(2),
+            month: row.month
+          }));
 
-          renderTable(filteredHeaders, filteredRows);
+          renderTable(
+            ["CustomerID", "InvoiceNo", "Quantity", "UnitPrice", "line_total", "month"],
+            processedCustomers
+          );
+
+
           document.getElementById('submitBtn').style.display = 'block';
+
         } catch (error) {
-          console.error("Error reading file:", error);
-          alert("Failed to read the file. Please upload a valid Excel/CSV file.");
+          console.error("Error:", error);
+          alert("Failed to process the file.");
+        } finally {
+          document.getElementById("loadingSpinner").style.display = "none";
         }
       };
 
@@ -57,19 +123,13 @@
 
     function renderTable(headers, rows) {
       const container = document.getElementById('tableContainer');
-      let html = '<table><thead><tr>';
-
-      headers.forEach(header => {
-        html += `<th>${header}</th>`;
-      });
-
+      let html = '<table class="data-table"><thead><tr>';
+      headers.forEach(h => html += `<th>${h}</th>`);
       html += '</tr></thead><tbody>';
 
       rows.forEach(row => {
         html += '<tr>';
-        row.forEach(cell => {
-          html += `<td>${cell !== undefined ? cell : ''}</td>`;
-        });
+        headers.forEach(h => html += `<td>${row[h]}</td>`);
         html += '</tr>';
       });
 
@@ -81,11 +141,130 @@
       fetch('/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ headers: filteredHeaders, rows: filteredRows })
+        body: JSON.stringify({ customers: processedCustomers })
       })
-      .then(res => res.text())
-      .then(msg => alert(msg));
+        .then(res => res.text())
+        .then(msg => alert(msg));
+    });
+  </script>
+</body>
+
+</html> -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Customer Analyze</title>
+  <link rel="stylesheet" href="/style/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.3/build/global/luxon.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 <span style="color:#3498db;">Customer</span> Analyze</h1>
+
+    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" />
+    <div id="loadingSpinner" style="display:none; text-align:center;">
+      <div class="loader"></div>
+      <p>Loading data...</p>
+    </div>
+
+    <div id="tableContainer"></div>
+    <button id="submitBtn" style="display:none;">Submit to Backend</button>
+  </div>
+
+  <script>
+    const DateTime = luxon.DateTime;
+    let processedCustomers = [];
+
+    document.getElementById('fileInput').addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return alert("Please select a file.");
+
+      const reader = new FileReader();
+      document.getElementById("loadingSpinner").style.display = "block";
+
+      reader.onload = function (event) {
+        try {
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          const cleaned = jsonData.filter(row =>
+            row['CustomerID'] && row['InvoiceNo'] &&
+            row['Quantity'] >= 0 && row['UnitPrice'] &&
+            row['InvoiceDate']
+          ).map(row => {
+            const invoiceDate = DateTime.fromISO(new Date(row['InvoiceDate']).toISOString());
+            return {
+              CustomerID: String(row['CustomerID']),
+              InvoiceNo: parseInt(row['InvoiceNo']),
+              Quantity: row['Quantity'],
+              UnitPrice: row['UnitPrice'],
+              InvoiceDate: invoiceDate.toISO(),
+              month: invoiceDate.month,
+              line_total: row['Quantity'] * row['UnitPrice']
+            };
+          });
+
+          processedCustomers = cleaned.slice(-1000);
+          renderTable(["CustomerID", "InvoiceNo", "Quantity", "UnitPrice", "line_total", "month"], processedCustomers);
+          document.getElementById('submitBtn').style.display = 'block';
+
+        } catch (err) {
+          console.error("Error processing file:", err);
+          alert("Error reading file.");
+        } finally {
+          document.getElementById("loadingSpinner").style.display = "none";
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+
+    function renderTable(headers, rows) {
+      const container = document.getElementById('tableContainer');
+      let html = '<table class="data-table"><thead><tr>';
+      headers.forEach(h => html += `<th>${h}</th>`);
+      html += '</tr></thead><tbody>';
+      rows.forEach(row => {
+        html += '<tr>';
+        headers.forEach(h => html += `<td>${row[h] ?? ''}</td>`);
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    document.getElementById('submitBtn').addEventListener('click', () => {
+      fetch('/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customers: processedCustomers })
+      })
+      .then(res => res.json())
+      .then(data => {
+        const { clusters, plot_base64 } = data;
+        clusters.forEach(c => {
+          const match = processedCustomers.find(p => p.CustomerID === c.CustomerID);
+          if (match) match.cluster = c.cluster;
+        });
+
+        renderTable(["CustomerID", "InvoiceNo", "Quantity", "UnitPrice", "line_total", "month", "cluster"], processedCustomers);
+
+        const image = document.createElement("img");
+        image.src = `data:image/png;base64,${plot_base64}`;
+        image.alt = "Silhouette Plot";        
+        image.style = "margin-top: 20px; max-width: 100%; border: 1px solid #ccc;";
+        document.getElementById("tableContainer").appendChild(image);
+      })
+      .catch(err => {
+        console.error("Error:", err);
+        alert("Failed to get clustering result.");
+      });
     });
   </script>
 </body>
 </html>
+
